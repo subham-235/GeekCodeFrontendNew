@@ -1,20 +1,19 @@
 import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
+import { NavLink, useParams } from 'react-router';
 import Editor from '@monaco-editor/react';
-import { useParams } from 'react-router';
-import axiosClient from "../utils/axiosClient"
-import SubmissionHistory from "../components/SubmissionHistory"
+import axiosClient from "../utils/axiosClient";
+import SubmissionHistory from "../components/SubmissionHistory";
 import ChatAi from '../components/ChatAi';
 import Editorial from '../components/Editorial';
 
 const langMap = {
-        cpp: 'C++',
-        java: 'Java',
-        javascript: 'JavaScript'
+  cpp: 'C++',
+  java: 'Java',
+  javascript: 'JavaScript'
 };
 
-// Normalizes any language string variant (JavaScript, javascript, JS, C++, cpp, etc.)
-// into one of: 'javascript' | 'java' | 'cpp'
+// Normalizes any language string variant into standard keys
 const normalizeLanguage = (lang) => {
   if (!lang) return '';
   const l = lang.toLowerCase().trim();
@@ -44,25 +43,52 @@ const ProblemPage = () => {
   const [activeLeftTab, setActiveLeftTab] = useState('description');
   const [activeRightTab, setActiveRightTab] = useState('code');
   const editorRef = useRef(null);
-  let {problemId}  = useParams();
+  let { problemId } = useParams();
 
   const { handleSubmit } = useForm();
+
+  // ================= THEME ENGINE (Synced with Homepage) =================
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('geekcode_theme') === 'dark';
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('geekcode_theme', isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
+
+  const theme = isDarkMode ? {
+    bgMain: "bg-neutral-950",
+    bgCard: "bg-neutral-900",
+    textMain: "text-neutral-50",
+    textMuted: "text-neutral-400",
+    border: "border-neutral-100",
+    borderHex: "#f5f5f5",
+    shadowDefault: "rgba(245,245,245,1)",
+    barBg: "bg-neutral-900"
+  } : {
+    bgMain: "bg-[#f4f4f0]",
+    bgCard: "bg-white",
+    textMain: "text-neutral-900",
+    textMuted: "text-neutral-500",
+    border: "border-neutral-900",
+    borderHex: "#171717",
+    shadowDefault: "rgba(23,23,23,1)",
+    barBg: "bg-white"
+  };
 
   // Fetch problem data
   useEffect(() => {
     const fetchProblem = async () => {
       setLoading(true);
       try {
-        
         const response = await axiosClient.get(`/problem/problemById/${problemId}`);
-        
         const initialCode = findStarterCode(response.data.starterCode, selectedLanguage);
-
         setProblem(response.data);
-        
         setCode(initialCode);
         setLoading(false);
-        
       } catch (error) {
         console.error('Error fetching problem:', error);
         setLoading(false);
@@ -95,17 +121,14 @@ const ProblemPage = () => {
   const handleRun = async () => {
     setLoading(true);
     setRunResult(null);
-    
     try {
       const response = await axiosClient.post(`/submission/run/${problemId}`, {
         code,
         language: selectedLanguage
       });
-
       setRunResult(response.data);
       setLoading(false);
       setActiveRightTab('testcase');
-      
     } catch (error) {
       console.error('Error running code:', error);
       setRunResult({
@@ -120,17 +143,14 @@ const ProblemPage = () => {
   const handleSubmitCode = async () => {
     setLoading(true);
     setSubmitResult(null);
-    
     try {
-        const response = await axiosClient.post(`/submission/submit/${problemId}`, {
-        code:code,
+      const response = await axiosClient.post(`/submission/submit/${problemId}`, {
+        code: code,
         language: selectedLanguage
       });
-
-       setSubmitResult(response.data);
-       setLoading(false);
-       setActiveRightTab('result');
-      
+      setSubmitResult(response.data);
+      setLoading(false);
+      setActiveRightTab('result');
     } catch (error) {
       console.error('Error submitting code:', error);
       setSubmitResult(null);
@@ -148,295 +168,333 @@ const ProblemPage = () => {
     }
   };
 
-  const getDifficultyColor = (difficulty) => {
-    switch (difficulty) {
-      case 'easy': return 'text-green-500';
-      case 'medium': return 'text-yellow-500';
-      case 'hard': return 'text-red-500';
-      default: return 'text-gray-500';
+  const getDifficultyBadgeColor = (difficulty) => {
+    switch (difficulty?.toLowerCase()) {
+      case 'easy':
+        return 'bg-emerald-500/10 text-emerald-500 border-emerald-500 dark:bg-emerald-500 dark:text-neutral-950';
+      case 'medium':
+        return 'bg-amber-500/10 text-amber-500 border-amber-500 dark:bg-amber-500 dark:text-neutral-950';
+      case 'hard':
+        return 'bg-red-500/10 text-red-500 border-red-500 dark:bg-red-500 dark:text-neutral-950';
+      default:
+        return 'bg-neutral-500/10 text-neutral-400 border-neutral-500';
     }
   };
 
   if (loading && !problem) {
     return (
-      <div className="flex justify-center items-center min-h-screen">
-        <span className="loading loading-spinner loading-lg"></span>
+      <div className={`flex justify-center items-center min-h-screen ${theme.bgMain} font-mono ${theme.textMain}`}>
+        <div className="flex flex-col items-center gap-2">
+          <span className="w-8 h-8 bg-emerald-500 animate-ping"></span>
+          <span className="text-xs font-black tracking-widest uppercase">DOWNLOADING_PROBLEM_MATRIX...</span>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="h-screen flex bg-base-100">
-      {/* Left Panel */}
-      <div className="w-1/2 flex flex-col border-r border-base-300">
-        {/* Left Tabs */}
-        <div className="tabs tabs-bordered bg-base-200 px-4">
-          <button 
-            className={`tab ${activeLeftTab === 'description' ? 'tab-active' : ''}`}
-            onClick={() => setActiveLeftTab('description')}
-          >
-            Description
-          </button>
-          <button 
-            className={`tab ${activeLeftTab === 'editorial' ? 'tab-active' : ''}`}
-            onClick={() => setActiveLeftTab('editorial')}
-          >
-            Editorial
-          </button>
-          <button 
-            className={`tab ${activeLeftTab === 'solutions' ? 'tab-active' : ''}`}
-            onClick={() => setActiveLeftTab('solutions')}
-          >
-            Solutions
-          </button>
-          <button 
-            className={`tab ${activeLeftTab === 'submissions' ? 'tab-active' : ''}`}
-            onClick={() => setActiveLeftTab('submissions')}
-          >
-            Submissions
-          </button>
+    <div className={`h-screen flex flex-col ${theme.bgMain} font-mono ${theme.textMain} transition-colors duration-300 antialiased`}>
+      
+      {/* ================= TERMINAL NAVIGATION BAR ================= */}
+      <nav className={`w-full ${theme.bgCard} border-b-4 ${theme.border} px-4 py-3 z-50`}>
+        <div className="max-w-full mx-auto flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="w-3 h-3 bg-emerald-500 animate-pulse"></span>
+            <NavLink to="/" className="text-xl font-black uppercase tracking-tighter hover:text-emerald-500 transition-none">
+              GEEKCODE<span className="text-emerald-500 font-extrabold">.EXE</span>
+            </NavLink>
+          </div>
 
-           <button 
-            className={`tab ${activeLeftTab === 'chatAI' ? 'tab-active' : ''}`}
-            onClick={() => setActiveLeftTab('chatAI')}
-          >
-            ChatAI
-          </button>
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className={`flex items-center justify-center w-8 h-8 ${theme.bgCard} ${theme.textMain} border-2 ${theme.border} hover:bg-emerald-500 hover:text-neutral-900 focus:outline-none transition-none`}
+              aria-label="Toggle Theme"
+            >
+              {isDarkMode ? (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
+      </nav>
 
-        {/* Left Content */}
-        <div className="flex-1 overflow-y-auto p-6">
-          {problem && (
-            <>
-              {activeLeftTab === 'description' && (
-                <div>
-                  <div className="flex items-center gap-4 mb-6">
-                    <h1 className="text-2xl font-bold">{problem.title}</h1>
-                    <div className={`badge badge-outline ${getDifficultyColor(problem.difficulty)}`}>
-                      {problem.difficulty.charAt(0).toUpperCase() + problem.difficulty.slice(1)}
+      {/* ================= WORKSPACE split panels ================= */}
+      <div className="flex-1 flex overflow-hidden">
+        
+        {/* ================= LEFT TERMINAL PANEL ================= */}
+        <div className={`w-1/2 flex flex-col border-r-4 ${theme.border} ${theme.bgCard}`}>
+          
+          {/* Tab Selection */}
+          <div className={`flex border-b-4 ${theme.border} overflow-x-auto`}>
+            {['description', 'editorial', 'solutions', 'submissions', 'chatAI'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveLeftTab(tab)}
+                className={`px-4 py-3 text-xs font-black uppercase tracking-wider transition-none border-r-2 last:border-r-0 ${theme.border} ${
+                  activeLeftTab === tab 
+                    ? 'bg-emerald-500 text-neutral-900' 
+                    : `${theme.textMain} hover:bg-neutral-800 hover:text-white dark:hover:bg-neutral-100 dark:hover:text-neutral-900`
+                }`}
+              >
+                [{tab}]
+              </button>
+            ))}
+          </div>
+
+          {/* Tab Main Content Area */}
+          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {problem && (
+              <>
+                {/* Description View */}
+                {activeLeftTab === 'description' && (
+                  <div className="space-y-6">
+                    <div className="flex flex-wrap items-center gap-3 pb-4 border-b-2 border-dashed border-neutral-700/50">
+                      <h1 className="text-2xl font-black uppercase tracking-tight">{problem.title}</h1>
+                      <span className={`px-2.5 py-1 text-xs font-black uppercase tracking-wider border-2 ${theme.border} ${getDifficultyBadgeColor(problem.difficulty)}`}>
+                        {problem.difficulty}
+                      </span>
+                      <span className={`px-2.5 py-1 text-xs font-bold uppercase tracking-wider ${theme.bgMain} ${theme.textMuted} border border-dashed border-neutral-500`}>
+                        #{problem.tags}
+                      </span>
                     </div>
-                    <div className="badge badge-primary">{problem.tags}</div>
-                  </div>
 
-                  <div className="prose max-w-none">
-                    <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                    <div className="whitespace-pre-wrap text-sm leading-relaxed tracking-tight">
                       {problem.description}
                     </div>
-                  </div>
 
-                  <div className="mt-8">
-                    <h3 className="text-lg font-semibold mb-4">Examples:</h3>
-                    <div className="space-y-4">
-                      {problem.visibleTestCases.map((example, index) => (
-                        <div key={index} className="bg-base-200 p-4 rounded-lg">
-                          <h4 className="font-semibold mb-2">Example {index + 1}:</h4>
-                          <div className="space-y-2 text-sm font-mono">
-                            <div><strong>Input:</strong> {example.input}</div>
-                            <div><strong>Output:</strong> {example.output}</div>
-                            <div><strong>Explanation:</strong> {example.explanation}</div>
+                    <div className="pt-6 border-t-2 border-dashed border-neutral-700/50">
+                      <h3 className="text-md font-black uppercase tracking-wider mb-4 text-emerald-500">// COMPILED_EXAMPLES</h3>
+                      <div className="space-y-4">
+                        {problem.visibleTestCases.map((example, index) => (
+                          <div 
+                            key={index} 
+                            className={`p-4 border-2 ${theme.border} ${theme.bgMain}`}
+                            style={{ boxShadow: `4px 4px 0px 0px ${theme.borderHex}` }}
+                          >
+                            <h4 className="text-xs font-black uppercase tracking-wider text-emerald-500 mb-2">[STRUCT_EX_{index + 1}]</h4>
+                            <div className="space-y-2 text-xs font-mono">
+                              <div><strong className="text-neutral-400">INPUT_STREAM:</strong> {example.input}</div>
+                              <div><strong className="text-neutral-400">EXPECTED_OUT:</strong> {example.output}</div>
+                              {example.explanation && (
+                                <div><strong className="text-neutral-400">TRACE_LOG:</strong> {example.explanation}</div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
-                  {activeLeftTab === 'editorial' && (
-                             <div className="prose max-w-none">
-                               <h2 className="text-xl font-bold mb-4">Editorial</h2>
-                               <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                                 <Editorial secureUrl={problem.secureUrl} thumbnailUrl={problem.thumbnailUrl} duration={problem.duration}/>
-                               </div>
-                             </div>
-                           )}
-
-              {activeLeftTab === 'solutions' && (
-                <div>
-                  <h2 className="text-xl font-bold mb-4">Solutions</h2>
-                  <div className="space-y-6">
-                    {problem.referenceSolution?.map((solution, index) => (
-                      <div key={index} className="border border-base-300 rounded-lg">
-                        <div className="bg-base-200 px-4 py-2 rounded-t-lg">
-                          <h3 className="font-semibold">{problem?.title} - {solution?.language}</h3>
-                        </div>
-                        <div className="p-4">
-                          <pre className="bg-base-300 p-4 rounded text-sm overflow-x-auto">
-                            <code>{solution?.completeCode}</code>
-                          </pre>
-                        </div>
-                      </div>
-                    )) || <p className="text-gray-500">Solutions will be available after you solve the problem.</p>}
+                {/* Editorial View */}
+                {activeLeftTab === 'editorial' && (
+                  <div>
+                    <h2 className="text-xl font-black uppercase tracking-wider text-emerald-500 mb-4">// EDITORIAL_DUMP</h2>
+                    <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                      <Editorial secureUrl={problem.secureUrl} thumbnailUrl={problem.thumbnailUrl} duration={problem.duration}/>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {activeLeftTab === 'submissions' && (
-                <div>
-                  <h2 className="text-xl font-bold mb-4">My Submissions</h2>
-                  <div className="text-gray-500">
+                {/* Solutions View */}
+                {activeLeftTab === 'solutions' && (
+                  <div>
+                    <h2 className="text-xl font-black uppercase tracking-wider text-emerald-500 mb-4">// DECOMPILED_SOLUTIONS</h2>
+                    <div className="space-y-6">
+                      {problem.referenceSolution?.map((solution, index) => (
+                        <div key={index} className={`border-2 ${theme.border} ${theme.bgMain}`} style={{ boxShadow: `4px 4px 0px 0px ${theme.borderHex}` }}>
+                          <div className={`bg-neutral-900 text-white dark:bg-neutral-100 dark:text-neutral-900 px-4 py-2 border-b-2 ${theme.border} flex justify-between items-center`}>
+                            <span className="text-xs font-black uppercase tracking-wider">{problem?.title}</span>
+                            <span className="text-[10px] px-2 py-0.5 bg-emerald-500 text-neutral-900 font-bold uppercase">{solution?.language}</span>
+                          </div>
+                          <div className="p-4 overflow-x-auto">
+                            <pre className="text-xs font-mono">
+                              <code>{solution?.completeCode}</code>
+                            </pre>
+                          </div>
+                        </div>
+                      )) || (
+                        <p className={`text-xs ${theme.textMuted} uppercase`}>
+                          ⚠️ SOLUTIONS UNREADABLE. RE-RESOLVE EXECUTABLE TO BYPASS ENCRYPTION.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Submissions View */}
+                {activeLeftTab === 'submissions' && (
+                  <div>
+                    <h2 className="text-xl font-black uppercase tracking-wider text-emerald-500 mb-4">// HISTORICAL_LOGS</h2>
                     <SubmissionHistory problemId={problemId} />
                   </div>
-                </div>
-              )}
-              {activeLeftTab === 'chatAI' && (
-                              <div className="prose max-w-none">
-                                <h2 className="text-xl font-bold mb-4">CHAT with AI</h2>
-                                <div className="whitespace-pre-wrap text-sm leading-relaxed">
-                                  <ChatAi problem={problem}></ChatAi>
-                                </div>
-                              </div>
-                            )}
-            </>
-          )}
-        </div>
-      </div>
+                )}
 
-      {/* Right Panel */}
-      <div className="w-1/2 flex flex-col">
-        {/* Right Tabs */}
-        <div className="tabs tabs-bordered bg-base-200 px-4">
-          <button 
-            className={`tab ${activeRightTab === 'code' ? 'tab-active' : ''}`}
-            onClick={() => setActiveRightTab('code')}
-          >
-            Code
-          </button>
-          <button 
-            className={`tab ${activeRightTab === 'testcase' ? 'tab-active' : ''}`}
-            onClick={() => setActiveRightTab('testcase')}
-          >
-            Testcase
-          </button>
-          <button 
-            className={`tab ${activeRightTab === 'result' ? 'tab-active' : ''}`}
-            onClick={() => setActiveRightTab('result')}
-          >
-            Result
-          </button>
+                {/* Chat AI View */}
+                {activeLeftTab === 'chatAI' && (
+                  <div>
+                    <h2 className="text-xl font-black uppercase tracking-wider text-emerald-500 mb-4">// PROMPT_AI_MATRIX</h2>
+                    <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                      <ChatAi problem={problem} />
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
 
-        {/* Right Content */}
-        <div className="flex-1 flex flex-col">
-          {activeRightTab === 'code' && (
-            <div className="flex-1 flex flex-col">
-              {/* Language Selector */}
-              <div className="flex justify-between items-center p-4 border-b border-base-300">
-                <div className="flex gap-2">
-                  {['javascript', 'java', 'cpp'].map((lang) => (
-                    <button
-                      key={lang}
-                      className={`btn btn-sm ${selectedLanguage === lang ? 'btn-primary' : 'btn-ghost'}`}
-                      onClick={() => handleLanguageChange(lang)}
-                    >
-                      {lang === 'cpp' ? 'C++' : lang === 'javascript' ? 'JavaScript' : 'Java'}
-                    </button>
-                  ))}
+        {/* ================= RIGHT WORKSPACE PANEL ================= */}
+        <div className={`w-1/2 flex flex-col ${theme.bgMain}`}>
+          
+          {/* Action Tabs */}
+          <div className={`flex border-b-4 ${theme.border} ${theme.bgCard}`}>
+            {['code', 'testcase', 'result'].map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveRightTab(tab)}
+                className={`px-4 py-3 text-xs font-black uppercase tracking-wider transition-none border-r-2 last:border-r-0 ${theme.border} ${
+                  activeRightTab === tab 
+                    ? 'bg-emerald-500 text-neutral-900' 
+                    : `${theme.textMain} hover:bg-neutral-800 hover:text-white dark:hover:bg-neutral-100 dark:hover:text-neutral-900`
+                }`}
+              >
+                [{tab}]
+              </button>
+            ))}
+          </div>
+
+          {/* Right Core Content Area */}
+          <div className="flex-1 flex flex-col overflow-hidden">
+            
+            {activeRightTab === 'code' && (
+              <div className="flex-1 flex flex-col overflow-hidden">
+                {/* Language Select Banner */}
+                <div className={`flex justify-between items-center p-3 border-b-2 ${theme.border} ${theme.bgCard}`}>
+                  <div className="flex gap-2">
+                    {['javascript', 'java', 'cpp'].map((lang) => (
+                      <button
+                        key={lang}
+                        className={`px-3 py-1 border-2 text-xs font-black uppercase tracking-wider transition-none ${
+                          selectedLanguage === lang 
+                            ? 'bg-emerald-500 text-neutral-900 border-neutral-950' 
+                            : `${theme.bgCard} ${theme.textMain} ${theme.border} hover:bg-neutral-800 hover:text-white`
+                        }`}
+                        onClick={() => handleLanguageChange(lang)}
+                      >
+                        {lang === 'cpp' ? 'C++' : lang === 'javascript' ? 'JavaScript' : 'Java'}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
 
-              {/* Monaco Editor */}
-              <div className="flex-1">
-                <Editor
-                  height="100%"
-                  language={getLanguageForMonaco(selectedLanguage)}
-                  value={code}
-                  onChange={handleEditorChange}
-                  onMount={handleEditorDidMount}
-                  theme="vs-dark"
-                  options={{
-                    fontSize: 14,
-                    minimap: { enabled: false },
-                    scrollBeyondLastLine: false,
-                    automaticLayout: true,
-                    tabSize: 2,
-                    insertSpaces: true,
-                    wordWrap: 'on',
-                    lineNumbers: 'on',
-                    glyphMargin: false,
-                    folding: true,
-                    lineDecorationsWidth: 10,
-                    lineNumbersMinChars: 3,
-                    renderLineHighlight: 'line',
-                    selectOnLineNumbers: true,
-                    roundedSelection: false,
-                    readOnly: false,
-                    cursorStyle: 'line',
-                    mouseWheelZoom: true,
-                  }}
-                />
-              </div>
+                {/* Monaco Editor Wrapper */}
+                <div className="flex-1 border-b-2 border-neutral-900 dark:border-neutral-100">
+                  <Editor
+                    height="100%"
+                    language={getLanguageForMonaco(selectedLanguage)}
+                    value={code}
+                    onChange={handleEditorChange}
+                    onMount={handleEditorDidMount}
+                    theme={isDarkMode ? 'vs-dark' : 'light'}
+                    options={{
+                      fontSize: 13,
+                      fontFamily: 'monospace',
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      automaticLayout: true,
+                      tabSize: 2,
+                      insertSpaces: true,
+                      wordWrap: 'on',
+                      lineNumbers: 'on',
+                      glyphMargin: false,
+                      folding: true,
+                      renderLineHighlight: 'all',
+                      roundedSelection: false,
+                      cursorStyle: 'line',
+                      mouseWheelZoom: true,
+                    }}
+                  />
+                </div>
 
-              {/* Action Buttons */}
-              <div className="p-4 border-t border-base-300 flex justify-between">
-                <div className="flex gap-2">
+                {/* Console Action Bar */}
+                <div className={`p-4 ${theme.bgCard} flex justify-between items-center`}>
                   <button 
-                    className="btn btn-ghost btn-sm"
+                    className={`px-4 py-2 border-2 ${theme.border} text-xs font-black uppercase tracking-widest hover:bg-neutral-800 hover:text-white transition-none`}
                     onClick={() => setActiveRightTab('testcase')}
                   >
-                    Console
+                    SYS_CONSOLE [~]
                   </button>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    className={`btn btn-outline btn-sm ${loading ? 'loading' : ''}`}
-                    onClick={handleRun}
-                    disabled={loading}
-                  >
-                    Run
-                  </button>
-                  <button
-                    className={`btn btn-primary btn-sm ${loading ? 'loading' : ''}`}
-                    onClick={handleSubmitCode}
-                    disabled={loading}
-                  >
-                    Submit
-                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      className={`px-4 py-2 border-2 ${theme.border} text-xs font-black uppercase tracking-widest hover:bg-emerald-500 hover:text-neutral-900 transition-none ${loading ? 'opacity-50 pointer-events-none' : ''}`}
+                      onClick={handleRun}
+                      disabled={loading}
+                    >
+                      {loading ? 'RUNNING...' : 'COMPILE_RUN'}
+                    </button>
+                    <button
+                      className={`px-4 py-2 border-2 ${theme.border} bg-emerald-500 text-neutral-900 text-xs font-black uppercase tracking-widest hover:bg-emerald-400 transition-none ${loading ? 'opacity-50 pointer-events-none' : ''}`}
+                      onClick={handleSubmitCode}
+                      disabled={loading}
+                    >
+                      {loading ? 'SUBMITTING...' : 'PUSH_PROD'}
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
-          {activeRightTab === 'testcase' && (
-            <div className="flex-1 p-4 overflow-y-auto">
-              <h3 className="font-semibold mb-4">Test Results</h3>
-              {runResult ? (
-                <div className={`alert ${runResult.success ? 'alert-success' : 'alert-error'} mb-4`}>
-                  <div>
+            {/* Test Case Output Console */}
+            {activeRightTab === 'testcase' && (
+              <div className="flex-1 p-6 overflow-y-auto space-y-4">
+                <h3 className="text-md font-black uppercase tracking-wider text-emerald-500">// STDOUT_TELEMETRY</h3>
+                {runResult ? (
+                  <div 
+                    className={`border-2 ${theme.border} p-4 bg-neutral-950 text-neutral-100 font-mono`}
+                    style={{ boxShadow: `4px 4px 0px 0px ${theme.borderHex}` }}
+                  >
                     {runResult.success ? (
-                      <div>
-                        <h4 className="font-bold">✅ All test cases passed!</h4>
-                        <p className="text-sm mt-2">Runtime: {runResult.runtime+" sec"}</p>
-                        <p className="text-sm">Memory: {runResult.memory+" KB"}</p>
+                      <div className="space-y-4">
+                        <div className="text-xs font-black text-emerald-500 uppercase tracking-widest">
+                          ✓ PARAMS EVALUATION: ALL CHANNELS COMPLETED SUCCESSFUL
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-[11px] uppercase text-neutral-400 pt-2 border-t border-dashed border-neutral-800">
+                          <div>RUNTIME_MS: {runResult.runtime} SEC</div>
+                          <div>MEM_ALLOC: {runResult.memory} KB</div>
+                        </div>
                         
-                        <div className="mt-4 space-y-2">
+                        <div className="space-y-3 pt-4 border-t-2 border-dashed border-neutral-800">
                           {runResult.testCases.map((tc, i) => (
-                            <div key={i} className="bg-base-100 p-3 rounded text-xs">
-                              <div className="font-mono">
-                                <div><strong>Input:</strong> {tc.stdin}</div>
-                                <div><strong>Expected:</strong> {tc.expected_output}</div>
-                                <div><strong>Output:</strong> {tc.stdout}</div>
-                                <div className={'text-green-600'}>
-                                  {'✓ Passed'}
-                                </div>
-                              </div>
+                            <div key={i} className="p-3 border border-neutral-800 bg-neutral-900/50 text-[11px] space-y-1">
+                              <div><strong className="text-neutral-500">PARAM_IN:</strong> {tc.stdin}</div>
+                              <div><strong className="text-neutral-500">PARAM_EXP:</strong> {tc.expected_output}</div>
+                              <div><strong className="text-neutral-500">SYS_OUT:</strong> {tc.stdout}</div>
+                              <div className="text-emerald-500 font-bold uppercase tracking-widest mt-1">✓ PASSED</div>
                             </div>
                           ))}
                         </div>
                       </div>
                     ) : (
-                      <div>
-                        <h4 className="font-bold">❌ Error</h4>
-                        <div className="mt-4 space-y-2">
+                      <div className="space-y-4">
+                        <div className="text-xs font-black text-red-500 uppercase tracking-widest">
+                          ✗ MATRIX EXCEPTION IN_STREAM FAILURES
+                        </div>
+                        <div className="space-y-3 pt-4 border-t-2 border-dashed border-neutral-800">
                           {runResult.testCases.map((tc, i) => (
-                            <div key={i} className="bg-base-100 p-3 rounded text-xs">
-                              <div className="font-mono">
-                                <div><strong>Input:</strong> {tc.stdin}</div>
-                                <div><strong>Expected:</strong> {tc.expected_output}</div>
-                                <div><strong>Output:</strong> {tc.stdout}</div>
-                                <div className={tc.status_id==3 ? 'text-green-600' : 'text-red-600'}>
-                                  {tc.status_id==3 ? '✓ Passed' : '✗ Failed'}
-                                </div>
+                            <div key={i} className="p-3 border border-neutral-800 bg-neutral-900/50 text-[11px] space-y-1">
+                              <div><strong className="text-neutral-500">PARAM_IN:</strong> {tc.stdin}</div>
+                              <div><strong className="text-neutral-500">PARAM_EXP:</strong> {tc.expected_output}</div>
+                              <div><strong className="text-neutral-500">SYS_OUT:</strong> {tc.stdout}</div>
+                              <div className={tc.status_id === 3 ? 'text-emerald-500 font-bold uppercase' : 'text-red-500 font-bold uppercase'}>
+                                {tc.status_id === 3 ? '✓ PASSED' : '✗ FAILED'}
                               </div>
                             </div>
                           ))}
@@ -444,48 +502,54 @@ const ProblemPage = () => {
                       </div>
                     )}
                   </div>
-                </div>
-              ) : (
-                <div className="text-gray-500">
-                  Click "Run" to test your code with the example test cases.
-                </div>
-              )}
-            </div>
-          )}
+                ) : (
+                  <p className={`text-xs uppercase ${theme.textMuted}`}>
+                    Ready for compilation interface parameters. Press "COMPILE_RUN" to test structures.
+                  </p>
+                )}
+              </div>
+            )}
 
-          {activeRightTab === 'result' && (
-            <div className="flex-1 p-4 overflow-y-auto">
-              <h3 className="font-semibold mb-4">Submission Result</h3>
-              {submitResult ? (
-                <div className={`alert ${submitResult.accepted ? 'alert-success' : 'alert-error'}`}>
-                  <div>
+            {/* Submission Evaluation Panel */}
+            {activeRightTab === 'result' && (
+              <div className="flex-1 p-6 overflow-y-auto space-y-4">
+                <h3 className="text-md font-black uppercase tracking-wider text-emerald-500">// PROD_EVALUATION</h3>
+                {submitResult ? (
+                  <div 
+                    className={`border-2 p-5 bg-neutral-950 font-mono ${
+                      submitResult.accepted ? 'border-emerald-500 text-emerald-500' : 'border-red-500 text-red-500'
+                    }`}
+                    style={{ boxShadow: `6px 6px 0px 0px ${theme.borderHex}` }}
+                  >
                     {submitResult.accepted ? (
-                      <div>
-                        <h4 className="font-bold text-lg">🎉 Accepted</h4>
-                        <div className="mt-4 space-y-2">
-                          <p>Test Cases Passed: {submitResult.passedTestCases}/{submitResult.totalTestCases}</p>
-                          <p>Runtime: {submitResult.runtime + " sec"}</p>
-                          <p>Memory: {submitResult.memory + "KB"} </p>
+                      <div className="space-y-4">
+                        <h4 className="text-lg font-black uppercase tracking-widest">🎉 ACCEPTED // SESSION RESOLVED</h4>
+                        <div className="space-y-2 text-xs uppercase text-neutral-300 pt-3 border-t border-dashed border-emerald-900/50">
+                          <p>MATRIX PASSED: {submitResult.passedTestCases} / {submitResult.totalTestCases}</p>
+                          <p>CPU EXEC TIME: {submitResult.runtime} SEC</p>
+                          <p>MEM METRICS: {submitResult.memory} KB</p>
                         </div>
                       </div>
                     ) : (
-                      <div>
-                        <h4 className="font-bold text-lg">❌ {submitResult.error}</h4>
-                        <div className="mt-4 space-y-2">
-                          <p>Test Cases Passed: {submitResult.passedTestCases}/{submitResult.totalTestCases}</p>
+                      <div className="space-y-4">
+                        <h4 className="text-lg font-black uppercase tracking-widest text-red-500">❌ SYSTEM EXCEPTION: {submitResult.error}</h4>
+                        <div className="space-y-2 text-xs uppercase text-neutral-300 pt-3 border-t border-dashed border-red-950">
+                          <p>MATRIX PASSED: {submitResult.passedTestCases} / {submitResult.totalTestCases}</p>
                         </div>
                       </div>
                     )}
                   </div>
-                </div>
-              ) : (
-                <div className="text-gray-500">
-                  Click "Submit" to submit your solution for evaluation.
-                </div>
-              )}
-            </div>
-          )}
+                ) : (
+                  <p className={`text-xs uppercase ${theme.textMuted}`}>
+                    Execution metrics empty. Deploy source payload via "PUSH_PROD" command.
+                  </p>
+                )}
+              </div>
+            )}
+
+          </div>
         </div>
+
       </div>
     </div>
   );
