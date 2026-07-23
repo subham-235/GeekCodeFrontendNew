@@ -127,16 +127,16 @@ const ProblemPage = () => {
         language: selectedLanguage
       });
       setRunResult(response.data);
-      setLoading(false);
       setActiveRightTab('testcase');
     } catch (error) {
       console.error('Error running code:', error);
       setRunResult({
         success: false,
-        error: 'Internal server error'
+        error: error.response?.data?.message || error.response?.data || error.message || 'Internal server error'
       });
-      setLoading(false);
       setActiveRightTab('testcase');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -149,11 +149,15 @@ const ProblemPage = () => {
         language: selectedLanguage
       });
       setSubmitResult(response.data);
-      setLoading(false);
-      setActiveRightTab('result');
     } catch (error) {
       console.error('Error submitting code:', error);
-      setSubmitResult(null);
+      setSubmitResult({
+        accepted: false,
+        error: error.response?.data?.message || error.response?.data || error.message || 'Submission failed',
+        passedTestCases: 0,
+        totalTestCases: 0,
+      });
+    } finally {
       setLoading(false);
       setActiveRightTab('result');
     }
@@ -472,7 +476,7 @@ const ProblemPage = () => {
                         </div>
                         
                         <div className="space-y-3 pt-4 border-t-2 border-dashed border-neutral-800">
-                          {runResult.testCases.map((tc, i) => (
+                          {runResult.testCases?.map((tc, i) => (
                             <div key={i} className="p-3 border border-neutral-800 bg-neutral-900/50 text-[11px] space-y-1">
                               <div><strong className="text-neutral-500">PARAM_IN:</strong> {tc.stdin}</div>
                               <div><strong className="text-neutral-500">PARAM_EXP:</strong> {tc.expected_output}</div>
@@ -487,8 +491,13 @@ const ProblemPage = () => {
                         <div className="text-xs font-black text-red-500 uppercase tracking-widest">
                           ✗ MATRIX EXCEPTION IN_STREAM FAILURES
                         </div>
+                        {runResult.error && (
+                          <div className="text-[11px] text-red-400 uppercase pt-2 border-t border-dashed border-neutral-800">
+                            {typeof runResult.error === 'string' ? runResult.error : JSON.stringify(runResult.error)}
+                          </div>
+                        )}
                         <div className="space-y-3 pt-4 border-t-2 border-dashed border-neutral-800">
-                          {runResult.testCases.map((tc, i) => (
+                          {runResult.testCases?.map((tc, i) => (
                             <div key={i} className="p-3 border border-neutral-800 bg-neutral-900/50 text-[11px] space-y-1">
                               <div><strong className="text-neutral-500">PARAM_IN:</strong> {tc.stdin}</div>
                               <div><strong className="text-neutral-500">PARAM_EXP:</strong> {tc.expected_output}</div>
@@ -532,7 +541,9 @@ const ProblemPage = () => {
                       </div>
                     ) : (
                       <div className="space-y-4">
-                        <h4 className="text-lg font-black uppercase tracking-widest text-red-500">❌ SYSTEM EXCEPTION: {submitResult.error}</h4>
+                        <h4 className="text-lg font-black uppercase tracking-widest text-red-500">
+                          ❌ SYSTEM EXCEPTION: {typeof submitResult.error === 'string' ? submitResult.error : JSON.stringify(submitResult.error)}
+                        </h4>
                         <div className="space-y-2 text-xs uppercase text-neutral-300 pt-3 border-t border-dashed border-red-950">
                           <p>MATRIX PASSED: {submitResult.passedTestCases} / {submitResult.totalTestCases}</p>
                         </div>
